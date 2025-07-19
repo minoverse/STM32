@@ -1,0 +1,70 @@
+#include "main.h"
+#include <string.h>
+#include <stdio.h>
+
+#define BUFFER_LEN 100
+
+UART_HandleTypeDef huart2;
+
+// Global buffers
+uint8_t rx_buffer_s[BUFFER_LEN];   // To store incoming message
+uint8_t tx_buffer_s[BUFFER_LEN];   // To store outgoing message
+uint8_t rx_data_s;                 // Holds a single received byte
+uint8_t counter_s = 0;             // Tracks index in rx_buffer_s
+
+void SystemClock_Config(void);
+static void MX_GPIO_Init(void);
+static void MX_USART2_UART_Init(void);
+
+int main(void)
+{
+  HAL_Init();
+  SystemClock_Config();
+  MX_GPIO_Init();
+  MX_USART2_UART_Init();
+
+  // Start receiving the first byte with interrupt
+  HAL_UART_Receive_IT(&huart2, &rx_data_s, 1);
+
+  while (1)
+  {
+    // Nothing is needed here; everything happens in interrupt callback
+  }
+}
+
+// UART Receive Callback: Called after each byte is received
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+  if (rx_data_s == '\r')  // If received byte is carriage return (Enter key)
+  {
+    char hello_cmd[] = "hello";
+
+    // Compare received buffer to the expected command
+    if (strcmp((char*)hello_cmd, (char*)rx_buffer_s) == 0)
+    {
+      const char *response = "Hello to you too\n";
+      strcpy((char*)tx_buffer_s, response);  // Copy response to transmit buffer
+    }
+    else
+    {
+      const char *error = "Uh oh, something didn’t work...\n";
+      strcpy((char*)tx_buffer_s, error);     // Copy error message
+    }
+
+    // Send response
+    HAL_UART_Transmit(&huart2, tx_buffer_s, strlen((char*)tx_buffer_s), HAL_MAX_DELAY);
+
+    // Clear both buffers and reset counter
+    memset(rx_buffer_s, 0, BUFFER_LEN);
+    memset(tx_buffer_s, 0, BUFFER_LEN);
+    counter_s = 0;
+  }
+  else
+  {
+    // If not Enter key, store received byte in rx_buffer
+    rx_buffer_s[counter_s++] = rx_data_s;
+  }
+
+  // Start listening for the next character again
+  HAL_UART_Receive_IT(&huart2, &rx_data_s, 1);
+}
